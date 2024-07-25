@@ -14,38 +14,78 @@
  * Иногда промисы от API будут приходить в состояние rejected, (прямо как и API в реальной жизни)
  * Ответ будет приходить в поле {result}
  */
- import Api from '../tools/api';
 
- const api = new Api();
+import { test, allPass, compose, length, ifElse, curry, andThen } from 'ramda';
+import Api from '../tools/api';
+import * as R from 'ramda';
+import { prop } from 'ramda';
 
- /**
-  * Я – пример, удали меня
-  */
- const wait = time => new Promise(resolve => {
-     setTimeout(resolve, time);
- })
+const api = new Api();
 
- const processSequence = ({value, writeLog, handleSuccess, handleError}) => {
-     /**
-      * Я – пример, удали меня
-      */
-     writeLog(value);
+const isNumber = test(/^\d+$/);
+const isLengthLessThan10 = compose(R.lt(R.__, 10), R.length);
+const isLengthGreaterThan2 = compose(R.gt(R.__, 2), R.length);
+const isPositive = compose(R.lt(0), parseFloat);
 
-     api.get('https://api.tech/numbers/base', {from: 2, to: 10, number: '01011010101'}).then(({result}) => {
-         writeLog(result);
-     });
+const validateNumber = allPass([isNumber, isLengthLessThan10, isLengthGreaterThan2, isPositive]);
 
-     wait(2500).then(() => {
-         writeLog('SecondLog')
+const toNumber = R.pipe(parseFloat, Math.round);
 
-         return wait(1500);
-     }).then(() => {
-         writeLog('ThirdLog');
+const convertToBinaryParams = (number) => ({
+  from: 10,
+  to: 2,
+  number,
+});
 
-         return wait(400);
-     }).then(() => {
-         handleSuccess('Done');
-     });
- }
+const fetchBinaryNumber = (number) =>
+  api.get('https://api.tech/numbers/base', convertToBinaryParams(number))
+    .then(prop('result'));
+
+const fetchAnimalName = (id) =>
+  api.get(`https://animals.tech/${id}`, '')
+    .then(prop('result'));
+
+const curryWriteLog = curry((logFn, value) => {
+  logFn(value);
+  return value;
+});
+
+const square = (num) => num * num;
+
+const remainderOfDivisionBy3 = (num) => num % 3;
+
+const processSequence = ({ value, writeLog, handleSuccess, handleError }) => {
+  const log = curryWriteLog(writeLog);
+
+  const handleValidationError = () => handleError('ValidationError');
+
+  const logAndProcess = compose(
+    andThen(handleSuccess),
+    fetchAnimalName,
+    log,
+    remainderOfDivisionBy3,
+    log,
+    square,
+    log,
+    length,
+    log
+  )
+
+  const processValidNumber = compose(
+    andThen(
+      logAndProcess
+    ),
+    fetchBinaryNumber,
+    log,
+    toNumber
+  );
+
+  const processValue = compose(
+    ifElse(validateNumber, processValidNumber, handleValidationError),
+    log
+  );
+
+  processValue(value);
+}
 
 export default processSequence;
